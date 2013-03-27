@@ -11,7 +11,9 @@
     }
 
     var clearHighlight = function( pane, highlightSpan ) {
-        if ( highlightSpan.parentNode !== null ) {
+        var p = highlightSpan.parentNode;
+
+        if ( p !== null ) {
             var children = highlightSpan.childNodes;
             var presize = children.length;
             var count = 0;
@@ -20,10 +22,22 @@
                 var child = children[0];
 
                 highlightSpan.removeChild( child );
-                highlightSpan.parentNode.insertBefore( child, highlightSpan );
+                p.insertBefore( child, highlightSpan );
             }
 
-            highlightSpan.parentNode.removeChild( highlightSpan );
+            p.removeChild( highlightSpan );
+        }
+    }
+
+    var replaceHighlight = function( pane, highlightSpan, content ) {
+        var p = highlightSpan.parentNode;
+
+        if ( p !== null ) {
+            highlightSpan.innerHTML = '';
+
+            var textNode = document.createTextNode( content );
+            p.insertBefore( textNode );
+            p.removeChild( highlightSpan );
         }
     }
 
@@ -33,19 +47,12 @@
         if (
                 start !== null &&
                 end !== null &&
+                end !== highlightSpan &&
                 start !== pane && 
-                end !== pane && 
-                end.parentNode !== highlightSpan
+                end !== pane
         ) {
             clearHighlight( pane, highlightSpan );
             
-            if ( highlightSpan.parentNode !== null ) {
-                throw new Error('highlightSpan has a parent!');
-            }
-            if ( highlightSpan.childNodes.length > 0 ) {
-                throw new Error('highlightSpan has children!');
-            }
-
             if (
                      end.offsetTop < start.offsetTop ||
                     (end.offsetTop === start.offsetTop && end.offsetLeft < start.offsetLeft)
@@ -69,15 +76,53 @@
                 node.parentNode.removeChild( node );
                 highlightSpan.appendChild( node );
             } while ( node !== end );
-
-            if ( highlightSpan.parentNode === null ) {
-                throw new Error('highlightSpan has no parent!');
-            }
-            if ( highlightSpan.childNodes.length === 0 ) {
-                throw new Error('highlightSpan no children!');
-            }
         }
     };
+
+    var isParent = function( root, child ) {
+        child = child.parentNode;
+
+        while ( child !== null ) {
+            if ( child === root ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    var ControlsBar = function() {
+        this.dom = $('<div>').
+                addClass( 'blocky-controls' );
+    }
+
+    ControlsBar.prototype = {
+        add: function( html, klass, fun ) {
+            if ( arguments.length === 2 ) {
+                fun = klass;
+                klass = html;
+                html = '';
+            }
+
+            var button = $('<a>').
+                    html( html || '&nbsp;' ).
+                    attr('href', '#').
+                    addClass( 'blocky-controls-button' );
+
+            touchy.click( button.get(0), function(ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+
+                        fun.call( this, ev );
+                    });
+
+            if ( klass ) {
+                button.addClass( klass );
+            }
+
+            this.dom.append( button );
+        }
+    }
 
     var Blocky = function( el ) {
         var dom = $(el);
@@ -85,15 +130,6 @@
         if ( dom.size() === 0 ) {
             throw new Error("element not found, " + el);
         }
-
-        var content = $('<div>').
-                addClass( 'blocky-main' );
-
-        var pane = $('<div>').
-                addClass( 'blocky-scroll-wrap' ).
-                append( content );
-
-        dom.append( pane );
 
         var start = null;
         var highlightSpan = $('<span>').
@@ -106,27 +142,36 @@
                 attr('spellcheck', false);
 
         touchy.press( this.textPane.get(0),
-                function(ev) {
+                function(ev, touchEv) {
                     ev.preventDefault();
 
-                    clearHighlight( this, highlightSpan );
-                    if ( ev.target !== this ) {
-                        start = ev.target;
+                    var target = ev.target;
+
+                    if ( target === this ) {
+                        target = document.elementFromPoint( touchEv.pageX, touchEv.pageY );
                     }
+
+                    if (
+                            target !== null &&
+                            target !== this &&
+                            isParent( this, target )
+                    ) {
+                        start = target;
+                    }
+
+                    updateRange( this, touchEv, start, highlightSpan );
                 },
+
                 function(ev, touchEv) {
                     ev.preventDefault();
 
-                    //alert('move');
                     updateRange( this, touchEv, start, highlightSpan );
-                    //alert('move end');
                 },
+
                 function(ev, touchEv) {
-                    //alert('up');
                     ev.preventDefault();
 
                     updateRange( this, touchEv, start, highlightSpan );
-                    //alert('up end');
                     start = null;
                 }
         );
@@ -138,14 +183,51 @@
                 addClass('blocky-text');
 
         this.textWrap.append( this.textPane, this.gutterPane );
-        content.append( this.textWrap );
 
         this.numberLines = 0;
         this.ensureLines( 10 );
 
         this.highlighter = qubyHighlight;
+        this.highlighter = textHighlighter;
 
-        var keyboard = new Clavier();
+        var self = this;
+        var keyboard = new Clavier({
+                onInput: function(c) {
+                    // if highlight is in use
+                    if ( highlightSpan.parentNode !== null ) {
+                        replaceHighlight( self, highlightSpan, c );
+                    }
+                },
+
+                onBackspace: function() {
+                    // if highlight is in use
+                    if ( highlightSpan.parentNode !== null ) {
+                        replaceHighlight( self, highlightSpan, '' );
+                    }
+                }
+        }).attach();
+        var controls = new ControlsBar();
+
+        controls.add( 'blocky-open-keyboard', function() {
+            keyboard.toggle();
+        } );
+
+        keyboard.attach();
+
+        var scrollPane = $('<div>').
+                addClass( 'blocky-scroll-wrap' ).
+                append( this.textWrap );
+
+        // finally, attack to the screen!
+        dom.append( scrollPane, controls.dom );
+    }
+
+    var textHighlighter = function(text, onDone) {
+        var html = text.replace( /\w+|[^A-Za-z0-9_ ]+/g, function(match) {
+            return "<span>" + htmlSafe(match) + "</span>";
+        });
+
+        onDone( html );
     }
 
     var getNumLines = function( text ) {
@@ -179,8 +261,6 @@
                     this.numberLines = num;
 
                     this.textPane.css( 'padding-left', this.gutterPane.outerWidth() + 6 );
-
-                    console.log( this.numberLines, this.gutterPane.text().split("\n").length );
                 }
             },
 
@@ -191,50 +271,22 @@
             },
 
             setText: function( text ) {
-                if ( this.highlighter === null ) {
-                    this.textPane.text( text );
-                    this.ensureLines( getNumLines(text) );
-                } else {
-                    var self = this;
+                var self = this;
 
-                    this.highlighter( text, function(html, numLines) {
-                        if ( arguments.length < 2 ) {
-                            numLines = getNumLines( text );
-                        }
+                this.highlighter( text, function(html, numLines) {
+                    if ( arguments.length < 2 ) {
+                        numLines = getNumLines( text );
+                    }
 
-                        self.textPane.html( html );
-                        self.ensureLines( numLines );
-                    } );
-                }
+                    self.textPane.html( html );
+                    self.ensureLines( numLines );
+                } );
 
                 return this;
             },
 
             getText: function() {
                 return this.textPane.textContent;
-            }
-    }
-
-    var SrcBuilder = function( prefix ) {
-        this.prefix = prefix || '';
-        this.sources = [];
-    }
-
-    SrcBuilder.prototype = {
-            push: function(src, type) {
-                if ( arguments.length === 0 ) {
-                    this.sources.push( src );
-                } else {
-                    this.sources.push( '<div class="' + this.prefix + type + '">' + src + '</div>' );
-                }
-            },
-
-            hasContent: function() {
-                return this.sources.length > 0;
-            },
-
-            getHTML: function() {
-                return this.sources.join( '' );
             }
     }
 

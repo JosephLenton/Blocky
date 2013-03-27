@@ -14,9 +14,7 @@
         FAST_CLICK_DIST = 20,
         SLOW_CLICK_DIST = 15;
 
-    var startTouch = function( ev, xy ) {
-        var touch = ev.changedTouches[ 0 ];
-        
+    var startTouch = function( xy, touch ) {
         if ( touch ) {
             xy.finger = touch.identifier;
             xy.timestart = Date.now();
@@ -86,15 +84,19 @@
         };
 
         if ( IS_TOUCH ) {
-            el.addEventListener( 'touchstart', function(ev) {
-                if ( startTouch(ev, xy) ) {
-                    onDown.call( el, ev );
+            var touchstart = function( ev ) {
+                var touch = ev.changedTouches[ 0 ];
+        
+                if ( startTouch(xy, touch) ) {
+                    onDown.call( el, ev, touch );
                 }
-            }, false )
+            }
+
+            el.addEventListener( 'touchstart', touchstart, false );
 
             el.addEventListener( 'touchmove', function(ev) {
                 if ( xy.finger === -1 ) {
-                    startTouch( ev, xy );
+                    touchstart( ev );
                 } else {
                     for ( var i = 0; i < ev.changedTouches.length; i++ ) {
                         var touch = ev.changedTouches[ i ];
@@ -140,8 +142,10 @@
             el.addEventListener( 'touchend', touchEnd, false );
 
             el.addEventListener( 'click', function(ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
+                if ( (ev.which || ev.button) === 1 ) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                }
             } );
         } else {
             var isDown = false;
@@ -150,10 +154,16 @@
                 ev = ev || window.event;
 
                 if ( (ev.which || ev.button) === 1 ) {
-                    ev.preventDefault();
-                
                     isDown = true;
-                    onDown.call( el, ev );
+                    onDown.call( el, ev, ev );
+                }
+            } );
+
+            el.addEventListener( 'mousemove', function(ev) {
+                ev = ev || window.event;
+
+                if ( (ev.which || ev.button) === 1 && isDown ) {
+                    onMove.call( el, ev, ev );
                 }
             } );
 
@@ -161,10 +171,8 @@
                 ev = ev || window.event;
 
                 if ( (ev.which || ev.button) === 1 && isDown ) {
-                    ev.preventDefault();
-                
                     isDown = false;
-                    onUp.call( el, ev );
+                    onUp.call( el, ev, ev );
                 }
             } );
         }
@@ -180,13 +188,15 @@
         var xy = { finger: -1, timestart: 0, x: 0, y: 0, moveX: 0, moveY: 0 };
 
         if ( IS_TOUCH ) {
-            el.addEventListener( 'touchstart', function(ev) {
-                startTouch( ev, xy );
-            }, false )
+            var touchstart = function(ev) {
+                startTouch( xy, ev.changedTouches[0] );
+            };
+
+            el.addEventListener( 'touchstart', touchstart, false );
 
             el.addEventListener( 'touchmove', function(ev) {
                 if ( xy.finger === -1 ) {
-                    startTouch( ev, xy );
+                    touchstart( ev );
                 } else {
                     for ( var i = 0; i < ev.changedTouches.length; i++ ) {
                         var touch = ev.changedTouches[ i ];
@@ -225,8 +235,10 @@
             }, false )
 
             var killEvent = function(ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
+                if ( (ev.which || ev.button) === 1 ) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                }
             }
 
             el.addEventListener( 'click'    , killEvent );
@@ -239,7 +251,7 @@
                 if ( (ev.which || ev.button) === 1 ) {
                     ev.preventDefault();
                 
-                    callback.call( el, ev );
+                    callback.call( el, ev, ev );
                 }
             } );
         }

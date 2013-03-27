@@ -19,8 +19,35 @@
       ==============================================================================
     */
 
-    var AUDIO_KEYBOARD_CLICK_SRC = '/keyboard-click.wav';
-    var DEFAULT_POSITION = '300px';
+    var ENABLE_AUDIO = false;
+
+    var AUDIO_KEYBOARD_CLICK_SRC = './keyboard-click.wav',
+        NUM_AUDIO_SOUNDS = 5;
+
+    var DEFAULT_POSITION = 'translate3d(0, -300px, 0)';
+
+    var Audios = function( src, count ) {
+        this.audios = new Array( count );
+
+        for ( var i = 0; i < count; i++ ) {
+            var audio = new Audio();
+
+            audio.loop = false;
+            audio.preload = 'auto';
+            audio.src = src;
+
+            this.audios[i] = audio;
+        }
+
+        this.offset = 0;
+    }
+
+    Audios.prototype.play = function() {
+        this.audios[ this.offset ].play();
+        this.offset = (this.offset + 1) % this.audios.length;
+
+        return this;
+    }
 
     var newElement = function( type, klass ) {
         var el = document.createElement( type );
@@ -506,7 +533,9 @@
             self.left.toggleAlt('symbols');
         });
 
-        pane.addBottom( '&#x25Be;', 'control close', options.onClose );
+        pane.addBottom( '&#x25Be;', 'control close', function() {
+            self.close();
+        } );
     }
 
     /*
@@ -554,10 +583,27 @@
 
     This is the keyboard it's self, and what the outside world interacts with.
 
+     ### Options:
+
+        - onClose, run when the 'close' method is called. This includes pressing
+          the close button on the keyboard.
+
+        - onOpen, run when this is asked to open.
+
+        - onInput, called when a character is hit on the keyboard.
+
+        - onBackspace, called when the backspace key is hit.
+
+        If you return 'false' from 'onClose' or 'onOpen', then those methods
+        default behaviour will be skipped entirely. This is to allow you to have
+        custom open/close behaviour.
+
     -------------------------------------------------------------------------------
     */
 
     var Clavier = (function(options) {
+        this.isOpenFlag = false;
+
         if ( arguments.length > 0 ) {
             if ( ! options ) {
                 throw new Error( "no options provided" );
@@ -566,10 +612,14 @@
             options = {};
         }
 
-        var audio = new Audio();
-        audio.loop = false;
-        audio.preload = 'auto';
-        audio.src = AUDIO_KEYBOARD_CLICK_SRC;
+        this.onCloseFun = options.onClose || null;
+        this.onOpenFun  = options.onOpen  || null;
+        this.onInputFun = options.onInput || null;
+        this.onBackspaceFun = options.onBackspace || null;
+
+        var audio = ENABLE_AUDIO ?
+                new Audios( AUDIO_KEYBOARD_CLICK_SRC, NUM_AUDIO_SOUNDS ) :
+                null ;
 
         this.input = null;
 
@@ -606,7 +656,9 @@
         
         var onButtonClick = function(ev) {
             if ( ev.target.classList.contains('clavier-key') ) {
-                audio.play();
+                if ( audio !== null ) {
+                    audio.play();
+                }
 
                 highlightKey( ev.target );
             }
@@ -692,6 +744,12 @@
     */
 
         inputBackspace: function() {
+            if ( this.onBackspaceFun ) {
+                if ( this.onBackspaceFun.call(this) === false ) {
+                    return this;
+                }
+            }
+
             var input = this.input;
 
             if ( input && input.value !== '' ) {
@@ -721,6 +779,8 @@
 
                 this.informInput();
             }
+
+            return this;
         },
 
     /*
@@ -736,9 +796,15 @@
     -------------------------------------------------------------------------------
     */
 
-        inputCharacter: function( char ) {
-            if ( char === undefined ) {
+        inputCharacter: function( c ) {
+            if ( c === undefined ) {
                 throw new Error( "undefined character given" );
+            }
+
+            if ( this.onInputFun ) {
+                if ( this.onInputFun.call(this, c) === false ) {
+                    return this;
+                }
             }
 
             var input = this.input;
@@ -755,15 +821,17 @@
 
                 input.value =
                         input.value.substring( 0, start ) +
-                        char +
+                        c +
                         input.value.substring( end );
 
                 input.selectionEnd =
                         input.selectionStart =
-                                start + char.length;
+                                start + c.length;
 
                 this.informInput();
             }
+
+            return this;
         },
 
     /*
@@ -873,6 +941,12 @@
 
         fixed: function() {
             this.dom.classList.add( 'fixed' );
+
+            return this;
+        },
+
+        isOpen: function() {
+            return this.isOpenFlag;
         },
 
     /*
@@ -884,7 +958,18 @@
     */
 
         open: function() {
-            this.dom.style.top = this.lastPosition ;
+            if ( this.onOpenFun ) {
+                if ( this.onOpenFun() === false ) {
+                    return this;
+                }
+            }
+
+            if ( ! this.isOpenFlag ) {
+                this.isOpenFlag = true;
+                this.dom.style.transform = this.dom.style.WebkitTransform = this.lastPosition;
+            }
+
+            return this;
         },
 
     /*
@@ -896,7 +981,46 @@
     */
 
         close: function() {
-            this.dom.style.top = '100%';
+            if ( this.onCloseFun ) {
+                if ( this.onCloseFun(this.isOpenFlag) === false ) {
+                    return this;
+                }
+            }
+
+            if ( this.isOpenFlag ) {
+                this.isOpenFlag = false;
+
+                this.lastPosition = this.dom.style.transform || this.dom.style.WebkitTransform;
+                this.dom.style.transform = this.dom.style.WebkitTransform = 'translate3d(0, 0, 0)' ;
+            }
+
+            return this;
+        },
+
+        toggle: function() {
+            if ( this.isOpen() ) {
+                this.close();
+            } else {
+                this.open();
+            }
+
+            return this;
+        },
+
+        attach: function() {
+            this.fixed();
+
+            if ( document.body ) {
+                document.body.appendChild( this.getDom() );
+            } else {
+                var self = this;
+
+                setTimeout( function() {
+                    document.body.appendChild( self.getDom() );
+                }, 1 );
+            }
+
+            return this;
         }
     };
 
