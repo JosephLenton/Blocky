@@ -248,7 +248,7 @@
                     }
                     .clavier-key.space {
                         position: absolute;
-                        width: 160px;
+                        width: 150px;
                     }
                     .clavier-left .clavier-key.space {
                         right: 0;
