@@ -105,8 +105,8 @@
     var Blocky = function( el ) {
         var dom = bb.get( el );
 
-        if ( ! (dom instanceof HTMLElement) ) {
-            throw new Error("dom element given, not found, or is not an element, " + el);
+        if ( ! dom ) {
+            throw new Error( "dom element given, not found, or is not an element, " + el );
         }
 
         var blockyDom = bb(
@@ -242,15 +242,15 @@
                         newLines[i] = i + this.numberLines + 1;
                     }
 
-                    var newLineNums = newLines.join("\n");
-                    if ( this.numberLines > 0 ) {
-                        newLineNums = "\n" + newLineNums;
-                    }
+                    var newLineNums = newLines.join("\n") + "\n";
 
                     this.gutterPane.insertAdjacentHTML( 'beforeend', newLineNums );
                     this.numberLines = num;
 
-                    this.textPane.style.paddingLeft = (this.gutterPane.offsetWidth + 6) + 'px';
+                    var self = this;
+                    setTimeout( function() {
+                        self.textPane.style.paddingLeft = (self.gutterPane.clientWidth + 6) + 'px';
+                    }, 0 );
                 }
             },
 

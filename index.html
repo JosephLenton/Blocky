@@ -10,7 +10,7 @@
 
 <script>
     var write = function( pre, post ) {
-        document.write( pre + '?v=' + Date.now() + post );
+        document.write( pre + '?v=' + (new Date().getTime()) + post );
     }
 </script>
 
@@ -25,18 +25,11 @@
         display: none;
     }
 </style>
-<script>
-        write( '<link rel="stylesheet" href="css/clavier.css', '">' );
-        write( '<link rel="stylesheet" href="css/blocky.css', '">' );
 
-        write( '<scr' + 'ipt src="js/platform.js', '"></scr' + 'ipt>' );
-        write( '<scr' + 'ipt src="js/clavier.js', '"></scr' + 'ipt>' );
-        write( '<scr' + 'ipt src="js/blocky.js', '"></scr' + 'ipt>' );
-</script>
 
 <div class="blocky"></div>
 
-<div class="example-code">
+<pre class="example-code">
 $NEW_CIRCLE_WAIT_TIME = 150
 $MAX_LAST_XY_SIZE = 5
 
@@ -102,10 +95,21 @@ onEachFrame() do |delta, millis|
         i = i+1
     end
 end
-</div>
+</pre>
 
 <script>
-    var blocky = new Blocky( document.getElementsByClassName('blocky')[0] );
+    write( '<link rel="stylesheet" href="css/clavier.css', '">' );
+    write( '<link rel="stylesheet" href="css/blocky.css', '">' );
 
-    blocky.setText( document.getElementsByClassName('example-code')[0].textContent );
+    write( '<scr' + 'ipt src="js/platform.js', '"></scr' + 'ipt>' );
+    write( '<scr' + 'ipt src="js/clavier.js', '"></scr' + 'ipt>' );
+    write( '<scr' + 'ipt src="js/blocky.js', '"></scr' + 'ipt>' );
+</script>
+
+<script>
+    var dom = document.getElementsByClassName('blocky')[0];
+    var blocky = new Blocky( dom );
+
+    var dom = document.getElementsByClassName('example-code')[0];
+    blocky.setText( dom.textContent );
 </script>
