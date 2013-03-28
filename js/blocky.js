@@ -1,15 +1,6 @@
 "use strict";
 
 (function() {
-    var $ = window.$;
-    if ( window.jQuery && ! window.$ ) {
-        $ = window.jQuery;
-    }
-
-    if ( $ === undefined ) {
-        throw new Error("jQuery not found");
-    }
-
     var clearHighlight = function( pane, highlightSpan ) {
         var p = highlightSpan.parentNode;
 
@@ -70,6 +61,7 @@
                 node = next;
                 if ( node.parentNode !== pane ) {
                     console.log( node );
+                    console.log( pane );
                 }
                 next = node.nextSibling;
 
@@ -86,103 +78,54 @@
             if ( child === root ) {
                 return true;
             }
+
+            child = child.parentNode;
         }
 
         return false;
     }
 
-    var ControlsBar = function() {
-        this.dom = $('<div>').
-                addClass( 'blocky-controls' );
-    }
-
-    ControlsBar.prototype = {
-        add: function( html, klass, fun ) {
-            if ( arguments.length === 2 ) {
-                fun = klass;
-                klass = html;
-                html = '';
-            }
-
-            var button = $('<a>').
-                    html( html || '&nbsp;' ).
-                    attr('href', '#').
-                    addClass( 'blocky-controls-button' );
-
-            touchy.click( button.get(0), function(ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-
-                        fun.call( this, ev );
-                    });
-
-            if ( klass ) {
-                button.addClass( klass );
-            }
-
-            this.dom.append( button );
+    var newButton = function( clickFun ) {
+        var numKlasses = arguments.length - 1 ;
+        var klasses = new Array( numKlasses );
+        for ( var i = 0; i < numKlasses; i++ ) {
+            klasses[i] = arguments[i+1];
         }
+
+        return bb( klasses, {
+            click: function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+
+                clickFun.call( this, ev );
+            }
+        } );
     }
 
     var Blocky = function( el ) {
-        var dom = $(el);
+        var dom = bb.get( el );
 
-        if ( dom.size() === 0 ) {
-            throw new Error("element not found, " + el);
+        if ( ! (dom instanceof HTMLElement) ) {
+            throw new Error("dom element given, not found, or is not an element, " + el);
         }
 
-        var start = null;
-        var highlightSpan = $('<span>').
-                addClass('blocky-highlight').
-                get(0);
+        var blockyDom = bb(
+                '.blocky-scroll-wrap', {
+                    addTo: dom,
 
-        this.textPane = $('<div>').
-                addClass('blocky-text-content').
-                attr('contenteditable', true).
-                attr('spellcheck', false);
+                    '.blocky-text': {
+                        '.blocky-text-gutter': { },
 
-        touchy.press( this.textPane.get(0),
-                function(ev, touchEv) {
-                    ev.preventDefault();
-
-                    var target = ev.target;
-
-                    if ( target === this ) {
-                        target = document.elementFromPoint( touchEv.pageX, touchEv.pageY );
+                        '.blocky-text-content': {
+                            contenteditable : true,
+                            spellcheck      : false
+                        }
                     }
-
-                    if (
-                            target !== null &&
-                            target !== this &&
-                            isParent( this, target )
-                    ) {
-                        start = target;
-                    }
-
-                    updateRange( this, touchEv, start, highlightSpan );
-                },
-
-                function(ev, touchEv) {
-                    ev.preventDefault();
-
-                    updateRange( this, touchEv, start, highlightSpan );
-                },
-
-                function(ev, touchEv) {
-                    ev.preventDefault();
-
-                    updateRange( this, touchEv, start, highlightSpan );
-                    start = null;
                 }
         );
 
-        this.gutterPane = $('<div>').
-                addClass('blocky-text-gutter');
-
-        this.textWrap = $('<div>').
-                addClass('blocky-text');
-
-        this.textWrap.append( this.textPane, this.gutterPane );
+        this.textPane   = blockyDom.querySelector( '.blocky-text-content' );
+        this.gutterPane = blockyDom.querySelector( '.blocky-text-gutter'  );
 
         this.numberLines = 0;
         this.ensureLines( 10 );
@@ -205,21 +148,68 @@
                         replaceHighlight( self, highlightSpan, '' );
                     }
                 }
-        }).attach();
-        var controls = new ControlsBar();
-
-        controls.add( 'blocky-open-keyboard', function() {
-            keyboard.toggle();
-        } );
-
+        });
         keyboard.attach();
 
-        var scrollPane = $('<div>').
-                addClass( 'blocky-scroll-wrap' ).
-                append( this.textWrap );
+        var start = null;
+        var highlightSpan = bb.span( 'blocky-highlight' );
+
+        touchy.press( this.textPane,
+                    function(ev, touchEv) {
+                        ev.preventDefault();
+
+                        clearHighlight( this, highlightSpan );
+
+                        var target = ev.target;
+
+                        if ( target === this ) {
+                            target = document.elementFromPoint( touchEv.pageX, touchEv.pageY );
+                        }
+
+                        if (
+                                target !== null &&
+                                target !== this &&
+                                isParent( this, target )
+                        ) {
+                            start = target;
+                        }
+
+                        updateRange( this, touchEv, start, highlightSpan );
+                    },
+
+                    function(ev, touchEv) {
+                        ev.preventDefault();
+
+                        updateRange( this, touchEv, start, highlightSpan );
+                    },
+
+                    function(ev, touchEv) {
+                        ev.preventDefault();
+
+                        updateRange( this, touchEv, start, highlightSpan );
+                        start = null;
+                    }
+        );
 
         // finally, attack to the screen!
-        dom.append( scrollPane, controls.dom );
+        dom.appendChild( 
+                bb( 'blocky-controls',
+                        ({  
+                                'blocky-open-keyboard': function() {
+                                    keyboard.toggle();
+                                },
+                                'blocky-undo disabled': function() {
+                                    // todo
+                                },
+                                'blocky-redo disabled': function() {
+                                    // todo
+                                },
+                                'blocky-paste': function() {
+                                    // todo
+                                }
+                        }).map( newButton.curry(_, 'blocky-controls-button') )
+                )
+        );
     }
 
     var textHighlighter = function(text, onDone) {
@@ -249,7 +239,7 @@
 
                     for ( var i = 0; i < diff; i++ ) {
                         // +1, because line numbers start at 1, not 0
-                        newLines[i] = i+this.numberLines+1;
+                        newLines[i] = i + this.numberLines + 1;
                     }
 
                     var newLineNums = newLines.join("\n");
@@ -257,10 +247,10 @@
                         newLineNums = "\n" + newLineNums;
                     }
 
-                    this.gutterPane.get(0).insertAdjacentHTML( 'beforeend', newLineNums );
+                    this.gutterPane.insertAdjacentHTML( 'beforeend', newLineNums );
                     this.numberLines = num;
 
-                    this.textPane.css( 'padding-left', this.gutterPane.outerWidth() + 6 );
+                    this.textPane.style.paddingLeft = (this.gutterPane.offsetWidth + 6) + 'px';
                 }
             },
 
@@ -278,7 +268,7 @@
                         numLines = getNumLines( text );
                     }
 
-                    self.textPane.html( html );
+                    self.textPane.innerHTML = html;
                     self.ensureLines( numLines );
                 } );
 
