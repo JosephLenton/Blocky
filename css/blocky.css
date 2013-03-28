@@ -48,6 +48,7 @@
         text-decoration: none;
     }
     .blocky-open-keyboard {
+        background: url(../images/icon-keyboard.png);
     }
 
     .blocky-scroll-wrap {
